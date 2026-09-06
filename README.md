@@ -11,12 +11,14 @@ When one reader lands on one story, which single ask is right: a newsletter, an 
 
 ## What I built
 
-- An editorial brief that states the thesis: for a nonprofit newsroom, the ask is a trust event, so first-party relationship comes before support.
-- A live decision lab across four example sections (Politics, World, Fact Check, Sports) and six discovery origins (direct, search, social video, aggregators, AI assistants, member sites).
+![The decision lab: pick a reader, adjust the fields, see the ask rendered inside a mock story with guardrails and scores](docs/lab.png)
+
+- A decision lab that starts from a reader, not a form: four presets (a regular Politics reader, a Fact Check reader arriving from an AI assistant, a current donor on breaking news, a fatigued Sports fan) or a custom reader built from every field.
+- The chosen ask rendered the way a reader would meet it inside a story: a newsletter module, a donation module with amounts, an account or app prompt, an alerts opt-in, or an untouched ad slot.
+- Guardrails shown as pass, blocked, or not applicable in plain language, and three short cards explaining why the other asks lost, using the real thresholds from the policy.
 - A working `POST /api/decision` microservice with validation, section policy, hard guardrails, reason codes, experiment cells, fallbacks and an inspectable seven-step trace.
 - Guardrails that veto any score: no payment ask during breaking news, a weekly ask budget per reader, and a permanent acquisition holdout for current donors.
-- A source-labeled public-signal ledger separating observed, public, inferred and proposed claims.
-- A sequenced 90-day and 2–4 quarter opportunity portfolio.
+- A source-labeled public-signal list separating observed, public and proposed claims.
 
 ## Run locally
 
