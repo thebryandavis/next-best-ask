@@ -299,7 +299,7 @@ function Lab() {
           <p className="fine">Every change re-runs the live policy. Nothing is stored.</p>
         </div>
 
-        <div className="card result">
+        <div className="card result" aria-live="polite">
           <div className="result-head">
             <h2><em>Step 3</em> The ask this reader gets</h2>
             <span className={`live ${status}`}>{status === "loading" ? "Recomputing" : status === "live" ? "Live API" : "Local fallback"}</span>
