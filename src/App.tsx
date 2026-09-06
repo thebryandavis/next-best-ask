@@ -1,162 +1,36 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowRight, ArrowUpRight, Braces } from "lucide-react";
-import { defaultContext, evaluateDecision } from "../shared/decision-engine.js";
-import { evidence, opportunities, originOptions, sectionOptions, storyModeOptions } from "./data";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { defaultContext, evaluateDecision, sectionPolicies } from "../shared/decision-engine.js";
+import { evidence, originOptions, sectionOptions, storyModeOptions } from "./data";
 import type { Decision, EvidenceLevel, JourneyContext } from "./types";
 
-const actionCopy: Record<string, string> = {
-  signup: "Offer a newsletter, not a payment ask",
-  account: "Offer an account with saves and alerts",
-  app: "Hand the habit to the app",
-  donation: "Make the donation ask, and make it specific",
-  sustain: "Invite monthly support, once",
-  steward: "Show the donor what the gift funded",
-  winback: "Welcome a past supporter back",
-  alerts: "Offer alerts only. Breaking news is not a fundraising moment",
-  advertising: "Leave the ad in place",
-  quiet: "Ask for nothing",
-};
+type Preset = { id: string; title: string; note: string; context: JourneyContext };
 
-const percent = (value: number) => `${Math.round(value * 100)}%`;
-
-function levelLabel(level: EvidenceLevel) {
-  return level.charAt(0).toUpperCase() + level.slice(1);
-}
-
-function Header() {
-  const links = [
-    ["Problem", "#problem"],
-    ["Policy", "#policy"],
-    ["Lab", "#lab"],
-    ["Roadmap", "#roadmap"],
-    ["Sources", "#sources"],
-  ];
-  return (
-    <header className="site-header">
-      <a className="wordmark" href="#top">Next Best Ask</a>
-      <nav aria-label="Primary">
-        {links.map(([label, href]) => (
-          <a key={href} href={href}>{label}</a>
-        ))}
-      </nav>
-      <a className="header-link" href="https://github.com/thebryandavis/next-best-ask" target="_blank" rel="noreferrer">
-        Source <ArrowUpRight size={14} />
-      </a>
-    </header>
-  );
-}
-
-function Hero() {
-  return (
-    <section className="hero" id="problem">
-      <p className="eyebrow">A working prototype · Example brand: AP News</p>
-      <h1>
-        One ask per reader.
-        <br />
-        <span>Explained.</span>
-      </h1>
-      <div className="hero-split">
-        <p className="lede">
-          A reader-supported newsroom can show the same person a newsletter prompt, an account prompt, an app banner and a
-          donation ask on a single visit. Each one makes sense to the team that owns it. Together they read as noise.
-        </p>
-        <p className="lede">
-          Next Best Ask is a small policy service that picks one of those asks for one reader on one story, and returns
-          the reason. The goal is more first-party relationships and more donations, with fewer interruptions.
-        </p>
-      </div>
-      <div className="cta-row">
-        <a className="button" href="#lab">Try the decision lab <ArrowRight size={16} /></a>
-        <a className="text-link" href="#sources">What it is based on</a>
-      </div>
-    </section>
-  );
-}
-
-function Policy() {
-  const rules = [
-    {
-      n: "01",
-      title: "Relationship before money.",
-      body: "An engaged anonymous reader is offered an email relationship first. The donation ask waits until there is a known reader with a habit and a reason to care.",
-    },
-    {
-      n: "02",
-      title: "Some moments are off limits.",
-      body: "No payment ask during breaking news. No more than a handful of asks in a week. Never an acquisition ask to someone who already gives.",
-    },
-    {
-      n: "03",
-      title: "Every decision carries its reason.",
-      body: "The API returns the ask, a reason code, a fallback and a seven-step trace. An editor, a fundraiser and an engineer can disagree about the same record.",
-    },
-  ];
-  return (
-    <section className="policy" id="policy">
-      <p className="eyebrow">What the policy says</p>
-      <div className="rules">
-        {rules.map((rule) => (
-          <article key={rule.n}>
-            <span className="rule-index">{rule.n}</span>
-            <h2>{rule.title}</h2>
-            <p>{rule.body}</p>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function RangeControl({
-  label,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  format?: (value: number) => string;
-  onChange: (value: number) => void;
-}) {
-  const fill = ((value - min) / (max - min)) * 100;
-  return (
-    <label className="range">
-      <span className="range-label">
-        {label}
-        <output>{format ? format(value) : value}</output>
-      </span>
-      <input
-        type="range"
-        value={value}
-        min={min}
-        max={max}
-        step={step}
-        aria-label={label}
-        onChange={(event) => onChange(Number(event.target.value))}
-        style={{ ["--fill" as string]: `${fill}%` }}
-      />
-    </label>
-  );
-}
-
-function Select<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (value: T) => void }) {
-  return (
-    <label className="select">
-      <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value as T)}>
-        {options.map((option) => (
-          <option key={option.id} value={option.id}>{option.label}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
+const presets: Preset[] = [
+  {
+    id: "politics-regular",
+    title: "Regular Politics reader",
+    note: "Anonymous · 7 visits · direct",
+    context: { ...(defaultContext as JourneyContext) },
+  },
+  {
+    id: "factcheck-assistant",
+    title: "Fact Check reader via an AI assistant",
+    note: "First visit · high intent",
+    context: { ...(defaultContext as JourneyContext), section: "fact-check", origin: "ai-assistant", partnerEngagement: 0.82, visits30d: 1, engagedMinutes: 4, missionAffinity: 0.8 },
+  },
+  {
+    id: "donor-breaking",
+    title: "Current donor on breaking news",
+    note: "Donor · World · breaking",
+    context: { ...(defaultContext as JourneyContext), section: "world", identity: "donor", storyMode: "breaking", visits30d: 10, engagedMinutes: 18, missionAffinity: 0.8, lapseRisk: 0.2 },
+  },
+  {
+    id: "sports-fatigued",
+    title: "Sports fan who has seen five asks",
+    note: "Email known · ask fatigue",
+    context: { ...(defaultContext as JourneyContext), section: "sports", identity: "known", asksSeen7d: 5, visits30d: 12, engagedMinutes: 9, missionAffinity: 0.3 },
+  },
+];
 
 const identityOptions = [
   { id: "anonymous", label: "Anonymous" },
@@ -172,266 +46,382 @@ const consentOptions = [
   { id: "personalization", label: "Personalization" },
 ] as const;
 
+const actionLabel: Record<string, string> = {
+  signup: "Newsletter",
+  account: "Account",
+  app: "App",
+  donation: "Donation",
+  sustain: "Monthly upgrade",
+  steward: "Stewardship",
+  winback: "Win-back",
+  alerts: "Alerts",
+  advertising: "Ad only",
+  quiet: "No ask",
+};
+
+const actionHeadline: Record<string, (section: string) => string> = {
+  signup: (s) => `Offer the ${newsletterName[s]}`,
+  account: () => "Offer an account with saves and alerts",
+  app: () => "Hand the habit to the app",
+  donation: (s) => `Ask for support of ${sectionName(s)} coverage`,
+  sustain: () => "Invite monthly support, once",
+  steward: () => "Show the donor what the gift funded",
+  winback: () => "Welcome a past supporter back",
+  alerts: () => "Offer breaking-news alerts only",
+  advertising: () => "Leave the ad in place, ask for nothing",
+  quiet: () => "Ask for nothing",
+};
+
+const newsletterName: Record<string, string> = {
+  politics: "Morning Wire",
+  world: "World Briefing",
+  "fact-check": "Fact Check alerts",
+  sports: "Scores and team alerts",
+};
+
+function sectionName(id: string) {
+  return sectionOptions.find((s) => s.id === id)?.label ?? id;
+}
+
+function equalContext(a: JourneyContext, b: JourneyContext) {
+  return (Object.keys(a) as (keyof JourneyContext)[]).every((k) => a[k] === b[k]);
+}
+
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+/* ---------- small pieces ---------- */
+
+function Check({ tone }: { tone: "pass" | "block" | "na" | "note" }) {
+  return (
+    <span className={`check ${tone}`} aria-hidden="true">
+      {tone === "pass" && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 6.5l2.5 2.5L10 3.5" /></svg>}
+      {tone === "block" && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 3l6 6M9 3l-6 6" /></svg>}
+      {tone === "na" && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h6" /></svg>}
+      {tone === "note" && <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 3v3.5M6 8.5v.5" /></svg>}
+    </span>
+  );
+}
+
+function Field<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+        {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function Slider({ label, value, min, max, step, format, onChange }: { label: string; value: number; min: number; max: number; step: number; format?: (v: number) => string; onChange: (v: number) => void }) {
+  const fill = ((value - min) / (max - min)) * 100;
+  return (
+    <label className="slider">
+      <span><b>{label}</b><output>{format ? format(value) : value}</output></span>
+      <input type="range" min={min} max={max} step={step} value={value} aria-label={label} onChange={(e) => onChange(Number(e.target.value))} style={{ ["--fill" as string]: `${fill}%` }} />
+    </label>
+  );
+}
+
+/* ---------- the in-story preview ---------- */
+
+function AskPreview({ action, section }: { action: string; section: string }) {
+  const name = sectionName(section);
+  if (action === "quiet" || action === "advertising") {
+    return (
+      <div className="preview-module quiet">
+        <div className="ad-slot">{action === "advertising" ? "Advertisement stays in this slot" : "No module is inserted"}</div>
+        <p>The reader keeps reading. Nothing is asked on this visit.</p>
+      </div>
+    );
+  }
+  if (action === "signup" || action === "alerts") {
+    const title = action === "alerts" ? "Get alerts as this story develops" : `Start your morning with the ${newsletterName[section]}`;
+    const sub = action === "alerts" ? "Breaking-news alerts, nothing else. Unsubscribe any time." : `The day's biggest ${name.toLowerCase()} stories, free, each weekday.`;
+    return (
+      <div className="preview-module">
+        <div><strong>{title}</strong><span>{sub}</span></div>
+        <div className="preview-form"><span className="preview-input">Email address</span><span className="preview-button">Sign up</span></div>
+      </div>
+    );
+  }
+  if (action === "account") {
+    return (
+      <div className="preview-module">
+        <div><strong>Save stories and get alerts on the topics you follow</strong><span>You already get our email. An account keeps your reading in one place.</span></div>
+        <span className="preview-button">Create account</span>
+      </div>
+    );
+  }
+  if (action === "app") {
+    return (
+      <div className="preview-module">
+        <div><strong>You read us most days. The app is faster.</strong><span>Offline reading, alerts, and your saved stories.</span></div>
+        <span className="preview-button">Get the app</span>
+      </div>
+    );
+  }
+  if (action === "donation" || action === "winback" || action === "sustain") {
+    const title = action === "sustain"
+      ? "You already support this work. Would you make it monthly?"
+      : action === "winback"
+        ? "Welcome back. Your past support helped fund this reporting."
+        : `Independent ${name.toLowerCase()} coverage is funded by readers like you`;
+    const sub = action === "sustain" ? "A monthly gift keeps reporters in the field all year." : "AP is a nonprofit. There is no paywall. Your gift keeps it that way.";
+    return (
+      <div className="preview-module donate">
+        <div><strong>{title}</strong><span>{sub}</span></div>
+        <div className="preview-amounts"><span>$5</span><span className="on">$15</span><span>$50</span><span className="preview-button">Give</span></div>
+      </div>
+    );
+  }
+  return (
+    <div className="preview-module">
+      <div><strong>Thank you for supporting this work</strong><span>Here is what your gift helped fund this month. No ask, just the report.</span></div>
+      <span className="preview-button">See the impact report</span>
+    </div>
+  );
+}
+
+/* ---------- lab ---------- */
+
 function Lab() {
-  const [context, setContext] = useState<JourneyContext>(defaultContext as JourneyContext);
-  const [decision, setDecision] = useState<Decision>(() => evaluateDecision(defaultContext as JourneyContext));
+  const [context, setContext] = useState<JourneyContext>(presets[0].context);
+  const [decision, setDecision] = useState<Decision>(() => evaluateDecision(presets[0].context));
   const [status, setStatus] = useState<"live" | "fallback" | "loading">("live");
-  const [showPayload, setShowPayload] = useState(false);
-  const sequence = useRef(0);
+  const [showJson, setShowJson] = useState(false);
+  const seq = useRef(0);
 
   useEffect(() => {
-    const current = ++sequence.current;
+    const current = ++seq.current;
     setStatus("loading");
-    const timer = window.setTimeout(async () => {
+    const t = window.setTimeout(async () => {
       try {
-        const response = await fetch("/api/decision", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(context),
-        });
-        if (!response.ok) throw new Error("unavailable");
-        const next = (await response.json()) as Decision;
-        if (sequence.current === current) {
-          setDecision(next);
-          setStatus("live");
-        }
+        const r = await fetch("/api/decision", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(context) });
+        if (!r.ok) throw new Error();
+        const next = (await r.json()) as Decision;
+        if (seq.current === current) { setDecision(next); setStatus("live"); }
       } catch {
-        if (sequence.current === current) {
-          setDecision(evaluateDecision(context));
-          setStatus("fallback");
-        }
+        if (seq.current === current) { setDecision(evaluateDecision(context)); setStatus("fallback"); }
       }
-    }, 160);
-    return () => window.clearTimeout(timer);
+    }, 140);
+    return () => window.clearTimeout(t);
   }, [context]);
 
-  const update = <K extends keyof JourneyContext>(key: K, value: JourneyContext[K]) =>
-    setContext((current) => ({ ...current, [key]: value }));
+  const update = <K extends keyof JourneyContext>(k: K, v: JourneyContext[K]) => setContext((c) => ({ ...c, [k]: v }));
+  const activePreset = presets.find((p) => equalContext(p.context, context))?.id ?? "custom";
+  const policy = sectionPolicies[context.section];
 
-  const section = sectionOptions.find((item) => item.id === context.section)!;
-  const origin = originOptions.find((item) => item.id === context.origin)!;
-  const scores = ["donation", "signup", "mission", "fatigue", "ad"];
-  if (decision.scores.partner > 0) scores.splice(3, 0, "partner");
+  const guardrails = useMemo(() => {
+    const items: { label: string; detail: string; tone: "pass" | "block" | "na" | "note" }[] = [];
+    if (context.storyMode === "breaking") items.push({ label: "Breaking news", detail: context.identity === "donor" ? "Donor: quiet state applies anyway" : "Payment asks are suppressed", tone: "block" });
+    else items.push({ label: "Not breaking news", detail: "Payment asks are allowed", tone: "pass" });
+    if (context.asksSeen7d >= 4) items.push({ label: "Over the weekly ask budget", detail: `${context.asksSeen7d} asks seen, cap is 3`, tone: "block" });
+    else items.push({ label: "Under the weekly ask budget", detail: `${context.asksSeen7d} of 3 used`, tone: "pass" });
+    if (context.identity === "donor") items.push({ label: "Donor protection applies", detail: "No acquisition asks, ever", tone: "note" });
+    else items.push({ label: "Donor protection does not apply", detail: "Not a current donor", tone: "na" });
+    if (context.consent === "essential") items.push({ label: "Consent is essential only", detail: "No personalized asks", tone: "block" });
+    else items.push({ label: `Consent allows ${context.consent}`, detail: "Asks can be tailored", tone: "pass" });
+    return items;
+  }, [context]);
+
+  const others = useMemo(() => {
+    const s = decision.scores;
+    const known = context.identity !== "anonymous";
+    const donationNeed = known ? policy.donationThreshold - 0.08 : policy.donationThreshold;
+    const rows: { key: string; text: string }[] = [];
+    if (decision.action !== "donation") {
+      rows.push({
+        key: "donation",
+        text: context.identity === "donor" ? "Donors are never shown an acquisition ask."
+          : context.storyMode === "breaking" ? "Suppressed during breaking news."
+          : context.asksSeen7d >= 4 ? "Held by the weekly ask budget."
+          : s.donation < donationNeed ? `Held. Needs ${donationNeed.toFixed(2)} in ${sectionName(context.section)}; this reader is at ${s.donation.toFixed(2)}.`
+          : context.identity === "anonymous" && context.visits30d < 6 ? "Held. Anonymous readers need six or more visits first."
+          : "Outranked by a higher-priority ask.",
+      });
+    }
+    if (decision.action !== "signup") {
+      rows.push({
+        key: "signup",
+        text: context.identity !== "anonymous" ? "Already has an email relationship."
+          : context.consent === "essential" ? "Needs consent beyond essential."
+          : context.asksSeen7d >= 4 ? "Held by the weekly ask budget."
+          : s.signup < policy.signupThreshold ? `Below the sign-up threshold of ${policy.signupThreshold.toFixed(2)}.`
+          : "Outranked by a higher-priority ask.",
+      });
+    }
+    if (decision.action !== "account") {
+      rows.push({ key: "account", text: context.identity === "known" ? "Needs more habit first. Comes at 0.55 engagement." : "Comes after an email is known." });
+    }
+    if (decision.action !== "advertising") {
+      rows.push({ key: "advertising", text: context.adValue >= 0.66 ? "Ad yield is high, but relationship propensity wins here." : "Stays in place. Ad value is not high enough to block an ask." });
+    }
+    return rows.slice(0, 3);
+  }, [decision, context, policy]);
+
+  const scoreRows = ["donation", "signup", "mission", "fatigue", "ad"];
+  if (decision.scores.partner > 0) scoreRows.splice(2, 0, "partner");
 
   return (
     <section className="lab" id="lab">
-      <div className="lab-intro">
-        <p className="eyebrow light">Decision lab · live API</p>
-        <h2>Change the reader. Watch the ask change.</h2>
-        <p>
-          Every control below is a field in the request. The response is the single ask the policy would make, with its
-          reason and the scores behind it. Nothing here is a production model.
-        </p>
+      <div className="step">
+        <h2><em>Step 1</em> Pick a reader, or build one</h2>
+        <div className="presets">
+          {presets.map((p) => (
+            <button key={p.id} type="button" className={`preset ${activePreset === p.id ? "on" : ""}`} onClick={() => setContext(p.context)} aria-pressed={activePreset === p.id}>
+              <strong>{p.title}</strong><span>{p.note}</span>
+            </button>
+          ))}
+          <div className={`preset custom ${activePreset === "custom" ? "on" : ""}`}><strong>Custom reader</strong><span>Change any field below</span></div>
+        </div>
       </div>
 
       <div className="lab-grid">
-        <div className="controls">
-          <fieldset>
-            <legend>Section</legend>
-            <div className="segments">
-              {sectionOptions.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={context.section === item.id ? "active" : ""}
-                  aria-pressed={context.section === item.id}
-                  onClick={() => update("section", item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <Select label="Discovery origin" value={context.origin} options={originOptions} onChange={(value) => { update("origin", value); update("partnerEngagement", value === "direct" ? 0 : 0.72); }} />
-          <Select label="Relationship" value={context.identity} options={identityOptions} onChange={(value) => update("identity", value)} />
-          <Select label="Story mode" value={context.storyMode} options={storyModeOptions} onChange={(value) => update("storyMode", value)} />
-          <Select label="Consent" value={context.consent} options={consentOptions} onChange={(value) => update("consent", value)} />
-
-          <div className="ranges">
-            <RangeControl label="Visits, 30 days" value={context.visits30d} min={0} max={20} step={1} onChange={(value) => update("visits30d", value)} />
-            <RangeControl label="Engaged minutes" value={context.engagedMinutes} min={0} max={40} step={1} onChange={(value) => update("engagedMinutes", value)} />
-            {context.origin !== "direct" && (
-              <RangeControl label="Partner engagement" value={context.partnerEngagement} min={0} max={1} step={0.01} format={percent} onChange={(value) => update("partnerEngagement", value)} />
-            )}
-            <RangeControl label="Mission affinity" value={context.missionAffinity} min={0} max={1} step={0.01} format={percent} onChange={(value) => update("missionAffinity", value)} />
-            <RangeControl label="Asks seen this week" value={context.asksSeen7d} min={0} max={8} step={1} onChange={(value) => update("asksSeen7d", value)} />
-            <RangeControl label="Ad value" value={context.adValue} min={0} max={1} step={0.01} format={percent} onChange={(value) => update("adValue", value)} />
-            {context.identity === "donor" && (
-              <RangeControl label="Lapse risk" value={context.lapseRisk} min={0} max={1} step={0.01} format={percent} onChange={(value) => update("lapseRisk", value)} />
-            )}
+        <div className="card controls">
+          <h2><em>Step 2</em> Adjust the reader</h2>
+          <div className="fields">
+            <Field label="Section" value={context.section} options={sectionOptions} onChange={(v) => update("section", v)} />
+            <Field label="Came from" value={context.origin} options={originOptions} onChange={(v) => { update("origin", v); update("partnerEngagement", v === "direct" ? 0 : 0.72); }} />
+            <Field label="Relationship" value={context.identity} options={identityOptions} onChange={(v) => update("identity", v)} />
+            <Field label="Story" value={context.storyMode} options={storyModeOptions} onChange={(v) => update("storyMode", v)} />
+            <Field label="Consent" value={context.consent} options={consentOptions} onChange={(v) => update("consent", v)} />
           </div>
+          <div className="sliders">
+            <Slider label="Visits in the last 30 days" value={context.visits30d} min={0} max={20} step={1} onChange={(v) => update("visits30d", v)} />
+            <Slider label="Minutes spent reading" value={context.engagedMinutes} min={0} max={40} step={1} onChange={(v) => update("engagedMinutes", v)} />
+            {context.origin !== "direct" && <Slider label="Engagement on the referring surface" value={context.partnerEngagement} min={0} max={1} step={0.01} format={pct} onChange={(v) => update("partnerEngagement", v)} />}
+            <Slider label="Mission affinity" value={context.missionAffinity} min={0} max={1} step={0.01} format={pct} onChange={(v) => update("missionAffinity", v)} />
+            <Slider label="Asks already seen this week" value={context.asksSeen7d} min={0} max={8} step={1} onChange={(v) => update("asksSeen7d", v)} />
+            <Slider label="Ad value of this page" value={context.adValue} min={0} max={1} step={0.01} format={pct} onChange={(v) => update("adValue", v)} />
+            {context.identity === "donor" && <Slider label="Risk of lapsing" value={context.lapseRisk} min={0} max={1} step={0.01} format={pct} onChange={(v) => update("lapseRisk", v)} />}
+          </div>
+          <p className="fine">Every change re-runs the live policy. Nothing is stored.</p>
         </div>
 
-        <div className="result">
-          <div className="result-status">
-            <span className={`dot ${status}`} />
-            {status === "loading" ? "Recomputing" : status === "live" ? "Live response" : "Local fallback"}
-            <code>{decision.decisionId}</code>
+        <div className="card result">
+          <div className="result-head">
+            <h2><em>Step 3</em> The ask this reader gets</h2>
+            <span className={`live ${status}`}>{status === "loading" ? "Recomputing" : status === "live" ? "Live API" : "Local fallback"}</span>
+          </div>
+          <div className="verdict">
+            <span className={`pill act-${decision.action}`}>{actionLabel[decision.action] ?? decision.action}</span>
+            <h3>{(actionHeadline[decision.action] ?? actionHeadline.quiet)(context.section)}</h3>
+          </div>
+          <p className="rationale">{decision.rationale}</p>
+
+          <div className="preview">
+            <div className="preview-label">Preview · inside a {sectionName(context.section)} story</div>
+            <div className="preview-story">
+              <div className="ph w90" /><div className="ph w80" />
+              <AskPreview action={decision.action} section={context.section} />
+              <div className="ph w85" /><div className="ph w70" />
+            </div>
           </div>
 
-          <p className="result-path">
-            {origin.label} <ArrowRight size={14} /> {section.label} <ArrowRight size={14} /> {context.identity.replace("-", " ")}
-          </p>
-          <h3>{actionCopy[decision.action] ?? actionCopy.quiet}.</h3>
-          <p className="result-rationale">{decision.rationale}</p>
-
-          <dl className="result-meta">
-            <div><dt>Action</dt><dd>{decision.action}</dd></div>
-            <div><dt>Treatment</dt><dd>{decision.treatment}</dd></div>
-            <div><dt>Reason</dt><dd>{decision.reasonCode}</dd></div>
-            <div><dt>Fallback</dt><dd>{decision.fallback}</dd></div>
-          </dl>
-
-          <div className="scores">
-            {scores.map((key) => (
-              <div className="score" key={key}>
-                <span>{key}</span>
-                <i><b style={{ transform: `scaleX(${decision.scores[key] ?? 0})` }} /></i>
-                <code>{(decision.scores[key] ?? 0).toFixed(2)}</code>
-              </div>
+          <div className="others">
+            {others.map((o) => (
+              <div key={o.key}><small>{actionLabel[o.key]}</small><p>{o.text}</p></div>
             ))}
           </div>
-
-          <button type="button" className="payload-toggle" onClick={() => setShowPayload(!showPayload)} aria-expanded={showPayload}>
-            <Braces size={15} /> {showPayload ? "Hide" : "Show"} request and response
-          </button>
-          {showPayload && (
-            <pre className="payload"><code>{JSON.stringify({ request: context, response: { action: decision.action, treatment: decision.treatment, reasonCode: decision.reasonCode, fallback: decision.fallback, experimentCell: decision.experimentCell, scores: decision.scores } }, null, 2)}</code></pre>
-          )}
         </div>
 
-        <ol className="trace" aria-label="Decision trace">
-          {decision.trace.map((step, index) => (
-            <li key={step.id} className={step.status}>
-              <span className="trace-index">{index + 1}</span>
-              <div>
-                <strong>{step.label}</strong>
-                <p>{step.detail}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <div className="side">
+          <div className="card">
+            <h2>Guardrails</h2>
+            <ul className="guardrails">
+              {guardrails.map((g) => (
+                <li key={g.label}><Check tone={g.tone} /><div><strong>{g.label}</strong><span>{g.detail}</span></div></li>
+              ))}
+            </ul>
+          </div>
+          <div className="card">
+            <div className="result-head"><h2>How it scored</h2><button type="button" className="text-button" onClick={() => setShowJson(!showJson)}>{showJson ? "Hide" : "See"} the API response</button></div>
+            <div className="scores">
+              {scoreRows.map((k) => (
+                <div key={k} className="score"><span>{k === "ad" ? "Ad value" : k.charAt(0).toUpperCase() + k.slice(1)}</span><i><b className={k === decision.action || (k === "signup" && decision.action === "signup") ? "hot" : ""} style={{ width: `${(decision.scores[k] ?? 0) * 100}%` }} /></i><code>{(decision.scores[k] ?? 0).toFixed(2)}</code></div>
+              ))}
+            </div>
+            <div className="reason"><code>{decision.reasonCode}</code><span>fallback: {decision.fallback}</span></div>
+            {showJson && <pre className="json"><code>{JSON.stringify({ request: context, response: { action: decision.action, treatment: decision.treatment, reasonCode: decision.reasonCode, fallback: decision.fallback, experimentCell: decision.experimentCell, scores: decision.scores } }, null, 2)}</code></pre>}
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-function Flow() {
-  const steps = [
-    ["Origin", "Search, social, aggregator, AI assistant, member site or direct."],
-    ["Reader state", "Anonymous, email known, registered, donor or lapsed donor."],
-    ["Policy", "Guardrails first, then scores, then the section's own thresholds."],
-    ["Surface", "The newsletter, account, app, donation or ad system renders it."],
-    ["Outcome", "Exposure, sign-up, gift and retention flow back into the record."],
-  ];
-  return (
-    <section className="flow">
-      <p className="eyebrow">Where it sits</p>
-      <h2>A thin layer between what you know about a reader and what you show them.</h2>
-      <ol>
-        {steps.map(([title, body], index) => (
-          <li key={title}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <strong>{title}</strong>
-            <p>{body}</p>
-          </li>
-        ))}
-      </ol>
-      <p className="flow-note">It does not replace the newsletter, account, app, donation or ad systems. It gives them one decision and one measurement contract.</p>
-    </section>
-  );
-}
+/* ---------- explainer + sources ---------- */
 
-function Roadmap() {
-  const items = opportunities.slice(0, 6);
+function HowItDecides() {
+  const rules = [
+    ["Relationship before money", "An engaged anonymous reader is offered an email relationship first. The donation ask waits until there is a known reader with a habit and a reason to care."],
+    ["Some moments are off limits", "No payment ask during breaking news. No more than three asks in a week. Never an acquisition ask to someone who already gives."],
+    ["Every decision carries its reason", "The API returns the ask, a reason code, a fallback and a seven-step trace. An editor, a fundraiser and an engineer can disagree about the same record."],
+  ];
+  const flow = ["Origin", "Reader state", "Guardrails", "Scores and section policy", "One ask", "Exposure and outcome"];
   return (
-    <section className="roadmap" id="roadmap">
-      <p className="eyebrow">First 90 days</p>
-      <h2>Guardrails before optimization.</h2>
-      <ol>
-        {items.map((item, index) => (
-          <li key={item.id}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
-            <div>
-              <strong>{item.title}</strong>
-              <p>{item.thesis}</p>
-              <small>{item.metric}</small>
-            </div>
-          </li>
-        ))}
+    <section className="explain" id="how">
+      <div className="explain-head">
+        <h2>How it decides</h2>
+        <p>Next Best Ask is a small policy service for a reader-supported newsroom. It sits between what you know about a reader and what you show them, and picks one ask per visit. AP News is the example brand.</p>
+      </div>
+      <div className="rules">
+        {rules.map(([t, b], i) => <div className="card" key={t}><small>0{i + 1}</small><strong>{t}</strong><p>{b}</p></div>)}
+      </div>
+      <ol className="flow">
+        {flow.map((f, i) => <li key={f}><span>{i + 1}</span>{f}</li>)}
       </ol>
+      <div className="api card">
+        <div><small>Endpoint</small><code>POST /api/decision</code></div>
+        <div><small>Returns</small><span>action · treatment · reasonCode · fallback · experimentCell · scores · trace</span></div>
+        <a href="https://github.com/thebryandavis/next-best-ask#decision-api" target="_blank" rel="noreferrer">Full request shape on GitHub</a>
+      </div>
     </section>
   );
 }
 
 function Sources() {
   const [level, setLevel] = useState<"all" | EvidenceLevel>("all");
-  const shown = evidence.filter((item) => level === "all" || item.level === level);
+  const shown = evidence.filter((e) => level === "all" || e.level === level);
   return (
     <section className="sources" id="sources">
-      <p className="eyebrow">Sources</p>
-      <h2>Public pages and public reports. Nothing internal.</h2>
-      <p className="sources-note">
-        AP News is the example brand because it is a nonprofit newsroom with a public donate page, flagship newsletters,
-        sign-in and apps. Every claim below is labeled by how it is known.
-      </p>
-      <div className="level-filter" role="group" aria-label="Filter by evidence level">
-        {(["all", "observed", "public", "proposed"] as const).map((item) => (
-          <button key={item} type="button" className={level === item ? "active" : ""} onClick={() => setLevel(item)}>
-            {item === "all" ? "All" : levelLabel(item)}
-          </button>
-        ))}
+      <div className="explain-head">
+        <h2>What it is based on</h2>
+        <p>Public pages and public reports only. AP News is the example brand because it is a nonprofit newsroom with a public donate page, flagship newsletters, sign-in and apps. No internal data was used.</p>
       </div>
-      <ul>
-        {shown.map((item) => (
-          <li key={item.id}>
-            <span className={`tag ${item.level}`}>{levelLabel(item.level)}</span>
-            <div>
-              <strong>{item.capability}</strong>
-              <p>{item.signal}</p>
-              <a href={item.url} target={item.url.startsWith("#") ? undefined : "_blank"} rel="noreferrer">{item.source} <ArrowUpRight size={12} /></a>
-            </div>
-          </li>
+      <div className="filters">
+        {(["all", "observed", "public", "proposed"] as const).map((l) => <button key={l} type="button" className={level === l ? "on" : ""} onClick={() => setLevel(l)}>{l === "all" ? "All" : l.charAt(0).toUpperCase() + l.slice(1)}</button>)}
+      </div>
+      <ul className="source-list">
+        {shown.map((e) => (
+          <li key={e.id} className="card"><span className={`tag ${e.level}`}>{e.level}</span><div><strong>{e.capability}</strong><p>{e.signal}</p><a href={e.url} target={e.url.startsWith("#") ? undefined : "_blank"} rel="noreferrer">{e.source}</a></div></li>
         ))}
       </ul>
     </section>
   );
 }
 
-function Footer() {
-  return (
-    <footer>
-      <p>
-        Next Best Ask is independent portfolio work by Bryan Davis. It is not an AP product and uses no internal AP data.
-      </p>
-      <div>
-        <a href="https://github.com/thebryandavis/next-best-ask" target="_blank" rel="noreferrer">GitHub <ArrowUpRight size={12} /></a>
-        <a href="https://github.com/thebryandavis/growth-room-lab" target="_blank" rel="noreferrer">Companion: Growth Room <ArrowUpRight size={12} /></a>
-        <a href="https://bryandavis.media" target="_blank" rel="noreferrer">bryandavis.media <ArrowUpRight size={12} /></a>
-      </div>
-    </footer>
-  );
-}
-
 export default function App() {
-  useEffect(() => {
-    if (!window.location.hash) return;
-    const timer = window.setTimeout(() => document.querySelector(window.location.hash)?.scrollIntoView(), 80);
-    return () => window.clearTimeout(timer);
-  }, []);
   return (
     <div id="top">
-      <Header />
+      <header className="topbar">
+        <div className="brand"><i /><strong>Next Best Ask</strong><span>Try the policy against any reader. Example brand: AP News.</span></div>
+        <nav>
+          <a href="#how">How it decides</a>
+          <a href="#sources">Sources</a>
+          <a className="dark" href="https://github.com/thebryandavis/next-best-ask" target="_blank" rel="noreferrer">GitHub</a>
+        </nav>
+      </header>
       <main>
-        <Hero />
-        <Policy />
         <Lab />
-        <Flow />
-        <Roadmap />
+        <HowItDecides />
         <Sources />
       </main>
-      <Footer />
+      <footer>
+        <span>Independent portfolio work by Bryan Davis. Not an AP product. No internal AP data.</span>
+        <a href="https://growth-room-lab-production.up.railway.app" target="_blank" rel="noreferrer">Companion: Growth Room</a>
+      </footer>
     </div>
   );
 }
