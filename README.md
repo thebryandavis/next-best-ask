@@ -1,6 +1,6 @@
 # Next Best Ask
 
-An explainable decision layer for donations and first-party sign-ups at a nonprofit newsroom, prototyped against public apnews.com signals.
+A small policy service that picks one ask per reader moment for a reader-supported newsroom, and explains why. AP News is the example brand; only public pages and public reports were used.
 
 **Built for:** Reader revenue, audience and product data teams at mission-funded news organizations
 **My role:** Product thesis, decision policy, API, interface and public-signal audit
@@ -12,7 +12,7 @@ When one reader lands on one story, which single ask is right: a newsletter, an 
 ## What I built
 
 - An editorial brief that states the thesis: for a nonprofit newsroom, the ask is a trust event, so first-party relationship comes before support.
-- A live decision lab across four AP sections (Politics, World, Fact Check, Sports) and six discovery origins (direct, search, social video, aggregators, AI assistants, member sites).
+- A live decision lab across four example sections (Politics, World, Fact Check, Sports) and six discovery origins (direct, search, social video, aggregators, AI assistants, member sites).
 - A working `POST /api/decision` microservice with validation, section policy, hard guardrails, reason codes, experiment cells, fallbacks and an inspectable seven-step trace.
 - Guardrails that veto any score: no payment ask during breaking news, a weekly ask budget per reader, and a permanent acquisition holdout for current donors.
 - A source-labeled public-signal ledger separating observed, public, inferred and proposed claims.
