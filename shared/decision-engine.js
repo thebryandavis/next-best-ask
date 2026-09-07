@@ -129,11 +129,14 @@ export function evaluateDecision(rawInput) {
   let rationale = "Keep the reading experience quiet and keep collecting consented engagement signal.";
   let fallback = "no-interruption";
 
-  if (input.storyMode === "breaking" && input.identity !== "donor") {
-    action = input.consent === "essential" ? "quiet" : "alerts";
-    treatment = input.consent === "essential" ? "no-ask-breaking-news" : "breaking-news-alert-opt-in";
+  if (input.storyMode === "breaking") {
+    const donor = input.identity === "donor";
+    action = donor || input.consent === "essential" ? "quiet" : "alerts";
+    treatment = donor ? "donor-thank-you-state" : input.consent === "essential" ? "no-ask-breaking-news" : "breaking-news-alert-opt-in";
     reasonCode = "BREAKING_NEWS_ASK_SUPPRESSED";
-    rationale = "Breaking coverage is not a fundraising moment. Offer continuity through alerts only if consent allows, and never a payment ask.";
+    rationale = donor
+      ? "Breaking coverage is not a fundraising moment, and this reader already gives. Show nothing but a quiet thank-you."
+      : "Breaking coverage is not a fundraising moment. Offer continuity through alerts only if consent allows, and never a payment ask.";
     fallback = "no-interruption";
   } else if (input.asksSeen7d >= 4 && input.identity !== "donor") {
     action = "quiet";

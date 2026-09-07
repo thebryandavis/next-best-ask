@@ -1,57 +1,59 @@
 # Next Best Ask
 
-A small policy service that picks one ask per reader moment for a reader-supported newsroom, and explains why. AP News is the example brand; only public pages and public reports were used.
+**Live:** https://next-best-ask-production.up.railway.app
 
-**Built for:** Reader revenue, audience and product data teams at mission-funded news organizations
-**My role:** Product thesis, decision policy, API, interface and public-signal audit
+A small policy service that picks one ask per reader, per visit, for a newsroom that runs on reader support, and explains why it picked it. AP News is the example brand. Everything here is built from public pages and invented numbers. No internal data.
 
-## What I was trying to learn
+**Built for:** reader revenue, audience, and product data teams
+**My role:** the thesis, the policy, the API, the interface
 
-When one reader lands on one story, which single ask is right: a newsletter, an account, the app, a donation, or nothing? And can that decision be explained well enough that an editor, a fundraiser and an engineer would all accept it?
+## The problem I kept running into
 
-## What I built
+On a reader-supported news site, four teams can each own an ask. Newsletter owns the sign-up prompt. Audience owns the account prompt. Mobile owns the app banner. Development owns the donation module. Each ask is reasonable on its own. A reader who hits all four on one visit does not experience four reasonable asks. They experience noise, and they learn to ignore all of it.
 
-![The decision lab: pick a reader, adjust the fields, see the ask rendered inside a mock story with guardrails and scores](docs/lab.png)
+I wanted to see what it would take to decide these together. One request in, one ask out, with a reason attached that a fundraiser, an editor, and an engineer could all argue with.
 
-- A decision lab that starts from a reader, not a form: four presets (a regular Politics reader, a Fact Check reader arriving from an AI assistant, a current donor on breaking news, a fatigued Sports fan) or a custom reader built from every field.
-- The chosen ask rendered the way a reader would meet it inside a story: a newsletter module, a donation module with amounts, an account or app prompt, an alerts opt-in, or an untouched ad slot.
-- Guardrails shown as pass, blocked, or not applicable in plain language, and three short cards explaining why the other asks lost, using the real thresholds from the policy.
-- A working `POST /api/decision` microservice with validation, section policy, hard guardrails, reason codes, experiment cells, fallbacks and an inspectable seven-step trace.
-- Guardrails that veto any score: no payment ask during breaking news, a weekly ask budget per reader, and a permanent acquisition holdout for current donors.
-- A source-labeled public-signal list separating observed, public and proposed claims.
+## What it does
 
-## Run locally
+![The lab with the default reader selected. A regular Politics reader gets the newsletter, not a donation ask.](docs/politics-regular.png)
 
-Requirements: Node.js 20 or later.
+You pick a reader, or build one, and the policy shows you what that reader would see on the page: the actual module rendered inside a mock story, the reason it won, and why the other asks lost.
 
-```bash
-npm install
-npm run dev
-```
+The policy has three parts, and they run in this order.
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
+Guardrails come first and they can veto anything. No payment ask during breaking news. No more than three asks in a week. Never an acquisition ask to someone who already gives. If a guardrail fires, the scores do not matter.
 
-Production path:
+Then it scores the reader on two things: how likely they are to give, and how likely they are to sign up for something free. Those scores use visits, time spent, mission affinity, where the reader came from, and how many asks they have already seen.
 
-```bash
-npm run build
-npm start
-```
+Then it applies the section's own rules. A Fact Check reader and a Sports reader arrive for different reasons, so the thresholds and the default first ask differ by section.
 
-## Verify
+## Walk through it
 
-```bash
-npm run check
-```
+The five presets are the cases I used to argue with myself while writing the policy.
 
-Runs the policy tests, TypeScript validation and the production build.
+**Regular Politics reader, anonymous.** Seven visits, decent affinity, no relationship on record. The policy offers the Morning Wire and holds the donation ask. Donation would need 0.60 here; this reader scores 0.40. This is the most common case and the whole thesis in one screen: earn an email before you ask for money.
 
-## Decision API
+**Fact Check reader arriving from an AI assistant.** First visit, but high intent on the referring surface. The policy treats the arrival itself as the signal and offers a first-party relationship right away, because an assistant referral is rare and a generic prompt wastes it.
 
-```http
-POST /api/decision
-Content-Type: application/json
-```
+![A loyal Fact Check reader with a known email gets the donation ask, with the exact threshold shown.](docs/factcheck-loyal.png)
+
+**Loyal Fact Check reader, email known.** Twelve visits, strong affinity, and AP already has the email. Now the donation ask is the right call, and the module says what the money funds instead of just asking for it.
+
+![A current donor on a breaking story gets nothing. Two guardrails fire at once.](docs/donor-breaking.png)
+
+**Current donor on breaking news.** Two guardrails fire at once. Breaking news suppresses payment asks, and donors never see an acquisition ask anyway. The reader gets nothing, and the panel on the right says so in plain language. I think this is the most important screen in the lab. The moment with the most traffic is the worst moment to fundraise, and the person most likely to be annoyed is the one who already gave.
+
+![A Sports fan who has seen five asks this week gets a quiet page.](docs/sports-fatigued.png)
+
+**Sports fan who has seen five asks.** The weekly budget is three. Nothing else about this reader matters until next week.
+
+Every preset has a link, so you can send someone straight to a case: add `?reader=donor-breaking` (or `politics-regular`, `factcheck-assistant`, `factcheck-loyal`, `sports-fatigued`) to the live URL.
+
+## How I would use this
+
+The lab is a conversation tool. Put it in front of a fundraiser and a newsletter editor at the same time and change one slider. The disagreement that follows is the product requirement.
+
+The API behind it is the real deliverable. `POST /api/decision` takes a reader context and returns the action, the treatment, a reason code, a fallback, an experiment cell, the scores, and a seven-step trace. That contract is what would let four teams keep their own systems while sharing one decision and one exposure event.
 
 ```json
 {
@@ -70,32 +72,32 @@ Content-Type: application/json
 }
 ```
 
-The response includes the selected action (`signup`, `account`, `app`, `donation`, `sustain`, `steward`, `winback`, `alerts`, `advertising` or `quiet`), the treatment, policy version, reason code, experiment cell, fallback, component scores and a trace from discovery origin through exposure measurement.
+Actions are `signup`, `account`, `app`, `donation`, `sustain`, `steward`, `winback`, `alerts`, `advertising`, or `quiet`.
 
-## Architecture
+## Run it locally
 
-```mermaid
-flowchart LR
-    A["Distribution edge"] --> B["Story experience"]
-    B --> C["Signal envelope"]
-    C --> D["Reader relationship"]
-    D --> E["Next Best Ask policy"]
-    E --> F["Newsletter, account, app, donate, ads"]
-    F --> G["Exposure and outcome truth"]
-    G --> E
+Node 20 or later.
+
+```bash
+npm install
+npm run dev        # http://127.0.0.1:5173
+npm run check      # policy tests, TypeScript, production build
 ```
-
-## Evidence standard
-
-- **Observed:** visible on a public apnews.com or ap.org page in September 2026
-- **Public:** stated by AP or a named third party in a public source
-- **Inferred:** a plausible interpretation that would need internal validation
-- **Proposed:** an original product or policy recommendation
 
 ## What remains unproven
 
-This prototype does not show that a coordinated ask policy raises donations or sign-ups. It shows the contract, the guardrails and the explanation. The next real test is one section, one known-reader donation cell, one clean holdout, with sign-up rate, unsubscribe rate and donor false-ask rate as guardrails.
+This shows the contract and the guardrails. It does not show that coordinating asks raises donations or sign-ups. The weights in the scoring are my judgment, not fitted to anything. The section thresholds are a starting argument, not a result.
 
-## Status
+## Next step
 
-Independent portfolio work by Bryan Davis. Not an AP product. Built from public pages and public reports only; no internal AP data, analytics or reader information was used.
+One section, one cell that only asks known readers with a mission signal, one clean holdout. Track gifts per thousand known sessions, unsubscribe rate, and how often a current donor gets shown an ask by mistake. That last number should be treated like an outage.
+
+## Where the claims come from
+
+Every claim in the app is labeled. Observed means I saw it on a public apnews.com or ap.org page in September 2026: the donate page, the Morning Wire and Afternoon Wire, sign-in, the apps. Public means AP or a named third party said it in a public source. Proposed means it is my idea. The sources section in the app links each one.
+
+## Related
+
+[Growth Room](https://github.com/thebryandavis/growth-room-lab) is the companion. Next Best Ask decides what one reader sees. Growth Room is where a team decides what the policy should test next.
+
+Independent portfolio work by Bryan Davis. Not an AP product.

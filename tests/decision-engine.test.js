@@ -52,6 +52,12 @@ test("never shows a donation ask during breaking news", () => {
   assert.notEqual(result.action, "donation");
 });
 
+test("never invites a donor to upgrade during breaking news", () => {
+  const result = evaluateDecision({ ...defaultContext, identity: "donor", storyMode: "breaking", visits30d: 18, engagedMinutes: 30, missionAffinity: 0.9, lapseRisk: 0.1 });
+  assert.equal(result.action, "quiet");
+  assert.equal(result.reasonCode, "BREAKING_NEWS_ASK_SUPPRESSED");
+});
+
 test("caps asks when the reader has already seen too many this week", () => {
   const result = evaluateDecision({ ...defaultContext, identity: "known", asksSeen7d: 5, visits30d: 15, missionAffinity: 0.9 });
   assert.equal(result.action, "quiet");

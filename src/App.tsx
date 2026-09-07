@@ -25,6 +25,12 @@ const presets: Preset[] = [
     context: { ...(defaultContext as JourneyContext), section: "world", identity: "donor", storyMode: "breaking", visits30d: 10, engagedMinutes: 18, missionAffinity: 0.8, lapseRisk: 0.2 },
   },
   {
+    id: "factcheck-loyal",
+    title: "Loyal Fact Check reader, email known",
+    note: "12 visits · high mission affinity",
+    context: { ...(defaultContext as JourneyContext), section: "fact-check", identity: "known", visits30d: 12, engagedMinutes: 20, missionAffinity: 0.85 },
+  },
+  {
     id: "sports-fatigued",
     title: "Sports fan who has seen five asks",
     note: "Email known · ask fatigue",
@@ -186,8 +192,12 @@ function AskPreview({ action, section }: { action: string; section: string }) {
 /* ---------- lab ---------- */
 
 function Lab() {
-  const [context, setContext] = useState<JourneyContext>(presets[0].context);
-  const [decision, setDecision] = useState<Decision>(() => evaluateDecision(presets[0].context));
+  const initial = useMemo(() => {
+    const id = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("reader") : null;
+    return presets.find((p) => p.id === id) ?? presets[0];
+  }, []);
+  const [context, setContext] = useState<JourneyContext>(initial.context);
+  const [decision, setDecision] = useState<Decision>(() => evaluateDecision(initial.context));
   const [status, setStatus] = useState<"live" | "fallback" | "loading">("live");
   const [showJson, setShowJson] = useState(false);
   const seq = useRef(0);
@@ -269,7 +279,7 @@ function Lab() {
         <h2><em>Step 1</em> Pick a reader, or build one</h2>
         <div className="presets">
           {presets.map((p) => (
-            <button key={p.id} type="button" className={`preset ${activePreset === p.id ? "on" : ""}`} onClick={() => setContext(p.context)} aria-pressed={activePreset === p.id}>
+            <button key={p.id} type="button" className={`preset ${activePreset === p.id ? "on" : ""}`} onClick={() => { setContext(p.context); window.history.replaceState(null, "", `?reader=${p.id}`); }} aria-pressed={activePreset === p.id}>
               <strong>{p.title}</strong><span>{p.note}</span>
             </button>
           ))}

@@ -52,7 +52,7 @@ main { max-width: 1440px; margin: 0 auto; padding: 28px 40px 80px; display: flex
 /* lab */
 .lab { display: flex; flex-direction: column; gap: 20px; }
 .step { display: flex; flex-direction: column; gap: 14px; }
-.presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.presets { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .preset { text-align: left; padding: 16px 18px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 4px; transition: border-color 0.15s; }
 .preset:hover { border-color: var(--line-2); }
 .preset.on { border: 2px solid var(--accent); padding: 15px 17px; }
